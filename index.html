@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>展示会ビデオメモ</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif;
+      background: #111;
+      color: #fff;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    h1 {
+      font-size: 16px;
+      font-weight: 500;
+      padding: 14px 0 10px;
+      color: #ccc;
+      letter-spacing: 0.05em;
+    }
+    #preview {
+      width: 100%;
+      max-width: 400px;
+      aspect-ratio: 9/16;
+      background: #000;
+      position: relative;
+      overflow: hidden;
+    }
+    #live {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    #status-bar {
+      position: absolute;
+      top: 14px;
+      left: 0; right: 0;
+      display: flex;
+      justify-content: center;
+    }
+    #status-label {
+      font-size: 14px;
+      font-weight: 600;
+      padding: 5px 18px;
+      border-radius: 20px;
+      letter-spacing: 0.06em;
+    }
+    .s-standby { background: rgba(0,0,0,0.6); color: #fff; }
+    .s-rec     { background: #e02020; color: #fff; }
+    .s-saving  { background: rgba(0,0,0,0.6); color: #aaa; }
+
+    #count-text {
+      position: absolute;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 48px;
+      font-weight: 300;
+      color: #fff;
+      text-shadow: 0 2px 12px rgba(0,0,0,0.8);
+      display: none;
+    }
+    #progress-bar {
+      position: absolute;
+      bottom: 0; left: 0;
+      height: 5px;
+      background: #e02020;
+      width: 0%;
+    }
+
+    #controls {
+      width: 100%;
+      max-width: 400px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      padding: 20px 16px;
+    }
+    #rec-btn {
+      width: 82px;
+      height: 82px;
+      border-radius: 50%;
+      border: 4px solid #444;
+      background: #222;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.1s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #rec-btn:active { transform: scale(0.92); }
+    #rec-inner {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: #e02020;
+      transition: border-radius 0.2s, width 0.2s, height 0.2s;
+    }
+    #rec-btn.recording #rec-inner {
+      border-radius: 7px;
+      width: 30px;
+      height: 30px;
+    }
+    #rec-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    #hint {
+      font-size: 13px;
+      color: #888;
+      text-align: center;
+    }
+    #auto-saved {
+      font-size: 13px;
+      color: #4caf50;
+      font-weight: 500;
+      min-height: 20px;
+      text-align: center;
+    }
+    #clip-count {
+      font-size: 13px;
+      color: #888;
+    }
+    #clip-count span { color: #fff; font-weight: 600; }
+
+    #gallery {
+      width: 100%;
+      max-width: 400px;
+      padding: 0 16px 32px;
+    }
+    #gallery-title {
+      font-size: 13px;
+      color: #888;
+      margin-bottom: 10px;
+      display: none;
+    }
+    #clips-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .clip-item {
+      border-radius: 10px;
+      overflow: hidden;
+      border: 0.5px solid #333;
+      background: #1a1a1a;
+      position: relative;
+    }
+    .clip-item video {
+      width: 100%;
+      aspect-ratio: 9/16;
+      object-fit: cover;
+      display: block;
+    }
+    .clip-num {
+      position: absolute;
+      top: 6px; left: 6px;
+      background: rgba(0,0,0,0.65);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 10px;
+    }
+    .saved-badge {
+      position: absolute;
+      top: 6px; right: 6px;
+      background: rgba(30,160,80,0.85);
+      color: #fff;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 8px;
+    }
+    .dl-btn {
+      display: block;
+      width: 100%;
+      padding: 7px 0;
+      font-size: 12px;
+      font-weight: 500;
+      text-align: center;
+      background: #1e3a5f;
+      color: #7eb8f7;
+      border: none;
+      cursor: pointer;
+      border-top: 0.5px solid #333;
+    }
+    .dl-btn:active { opacity: 0.75; }
+
+    #error-msg {
+      font-size: 14px;
+      color: #f66;
+      text-align: center;
+      padding: 20px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>展示会ビデオメモ</h1>
+
+  <div id="preview">
+    <video id="live" autoplay muted playsinline></video>
+    <div id="status-bar">
+      <span id="status-label" class="s-standby">スタンバイ</span>
+    </div>
+    <div id="count-text">10</div>
+    <div id="progress-bar"></div>
+  </div>
+
+  <div id="controls">
+    <button id="rec-btn" disabled>
+      <div id="rec-inner"></div>
+    </button>
+    <div id="hint">タップで10秒録画・自動保存</div>
+    <div id="auto-saved"></div>
+    <div id="clip-count">撮影済み: <span id="cnt">0</span> クリップ</div>
+    <div id="error-msg"></div>
+  </div>
+
+  <div id="gallery">
+    <div id="gallery-title">撮影済みクリップ（再ダウンロード可）</div>
+    <div id="clips-grid"></div>
+  </div>
+
+  <script>
+    let stream, mediaRecorder, chunks = [], clipCount = 0, timerInterval;
+
+    const liveEl       = document.getElementById('live');
+    const recBtn       = document.getElementById('rec-btn');
+    const statusLabel  = document.getElementById('status-label');
+    const countText    = document.getElementById('count-text');
+    const progressBar  = document.getElementById('progress-bar');
+    const autoSaved    = document.getElementById('auto-saved');
+    const cntEl        = document.getElementById('cnt');
+    const galleryTitle = document.getElementById('gallery-title');
+    const clipsGrid    = document.getElementById('clips-grid');
+    const errorMsg     = document.getElementById('error-msg');
+
+    function pad(n) { return String(n).padStart(2, '0'); }
+
+    function getFilename() {
+      const d = new Date();
+      clipCount++;
+      const dt = `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+      const ext = MediaRecorder.isTypeSupported('video/mp4') ? 'mp4' : 'webm';
+      return [`展示会_${dt}_${clipCount}.${ext}`, ext];
+    }
+
+    async function init() {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: true
+        });
+        liveEl.srcObject = stream;
+        recBtn.disabled = false;
+      } catch(e) {
+        errorMsg.style.display = 'block';
+        errorMsg.textContent = 'カメラの許可が必要です。ブラウザの設定でカメラをONにしてください。';
+        statusLabel.textContent = 'カメラ許可が必要';
+        statusLabel.className = 's-saving';
+      }
+    }
+
+    function startRec() {
+      chunks = [];
+      const mimeType =
+        MediaRecorder.isTypeSupported('video/mp4')            ? 'video/mp4' :
+        MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' :
+                                                                  'video/webm';
+      mediaRecorder = new MediaRecorder(stream, { mimeType });
+      mediaRecorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+      mediaRecorder.onstop = autoSaveClip;
+      mediaRecorder.start();
+
+      recBtn.classList.add('recording');
+      recBtn.disabled = true;
+      statusLabel.textContent = '● REC';
+      statusLabel.className = 's-rec';
+      countText.style.display = 'block';
+      autoSaved.textContent = '';
+
+      progressBar.style.transition = 'none';
+      progressBar.style.width = '0%';
+      setTimeout(() => {
+        progressBar.style.transition = 'width 10s linear';
+        progressBar.style.width = '100%';
+      }, 50);
+
+      let secs = 10;
+      countText.textContent = secs;
+      timerInterval = setInterval(() => {
+        secs--;
+        countText.textContent = secs;
+        if (secs <= 0) {
+          clearInterval(timerInterval);
+          mediaRecorder.stop();
+        }
+      }, 1000);
+    }
+
+    function autoSaveClip() {
+      const [filename, ext] = getFilename();
+      const blob = new Blob(chunks, { type: chunks[0]?.type || 'video/webm' });
+      const url  = URL.createObjectURL(blob);
+
+      statusLabel.textContent = '保存中...';
+      statusLabel.className   = 's-saving';
+
+      // 自動ダウンロード
+      const a = document.createElement('a');
+      a.href     = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+      autoSaved.textContent = `✅ 保存: ${filename}`;
+      cntEl.textContent = clipCount;
+
+      // ギャラリーに追加
+      const item = document.createElement('div');
+      item.className = 'clip-item';
+      item.innerHTML = `
+        <video src="${url}" muted playsinline loop></video>
+        <span class="clip-num">${clipCount}</span>
+        <span class="saved-badge">保存済</span>
+        <button class="dl-btn">📥 再ダウンロード</button>
+      `;
+      item.querySelector('video').addEventListener('click', function() {
+        this.paused ? this.play() : this.pause();
+      });
+      item.querySelector('.dl-btn').addEventListener('click', () => {
+        const a2 = document.createElement('a');
+        a2.href     = url;
+        a2.download = filename;
+        a2.click();
+      });
+      clipsGrid.prepend(item);
+      galleryTitle.style.display = 'block';
+
+      setTimeout(() => {
+        recBtn.classList.remove('recording');
+        recBtn.disabled = false;
+        statusLabel.textContent = 'スタンバイ';
+        statusLabel.className   = 's-standby';
+        countText.style.display = 'none';
+        progressBar.style.transition = 'none';
+        progressBar.style.width = '0%';
+      }, 600);
+    }
+
+    recBtn.addEventListener('click', startRec);
+    init();
+  </script>
+</body>
+</html>
